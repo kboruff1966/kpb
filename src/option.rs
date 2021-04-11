@@ -1,4 +1,5 @@
 // replicate the std::option module
+use std::mem;
 
 // This is a separate function to reduce the code size of .expect() itself.
 #[inline(never)]
@@ -16,10 +17,16 @@ fn expect_none_failed(msg: &str, value: &dyn std::fmt::Debug) -> ! {
     panic!("{}: {:?}", msg, value)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum MyOption<T> {
     None,
     Some(T),
+}
+
+impl<T> Default for MyOption<T> {
+    fn default() -> MyOption<T> {
+        MyOption::None
+    }
 }
 
 impl<T> MyOption<T> {
@@ -174,12 +181,110 @@ impl<T> MyOption<T> {
             _ => MyOption::None,
         }
     }
+
+    pub fn get_or_insert(&mut self, value: T) -> &mut T {
+        self.get_or_insert_with(|| value)
+    }
+
+    pub fn get_or_insert_with<F>(&mut self, f: F) -> &mut T
+    where
+        F: FnOnce() -> T,
+    {
+        if let MyOption::None = *self {
+            *self = MyOption::Some(f());
+        }
+
+        match self {
+            MyOption::Some(v) => v,
+            MyOption::None => panic!("unreachable code"),
+        }
+    }
+
+    // takes the value out of the option, leaving None in its place
+    pub fn take(&mut self) -> MyOption<T> {
+        mem::take(self)
+    }
+
+    pub fn replace(&mut self, value: T) -> MyOption<T> {
+        mem::replace(self, MyOption::Some(value))
+    }
+
+    pub fn zip<U>(self, other: MyOption<U>) -> MyOption<(T, U)> {
+        match (self, other) {
+            (MyOption::Some(x), MyOption::Some(y)) => MyOption::Some((x, y)),
+            _ => MyOption::None,
+        }
+    }
 }
 
 #[cfg(test)]
 pub mod options_test {
 
     use super::MyOption;
+
+    #[test]
+    fn zip_test() {
+        let x = MyOption::Some(1);
+        let y = MyOption::Some("hi");
+        let z = MyOption::None::<u8>;
+
+        assert_eq!(x.zip(y), MyOption::Some((1, "hi")));
+        assert_eq!(x.zip(z), MyOption::None);
+    }
+
+    #[test]
+    fn replace_test() {
+        let mut x = MyOption::Some(2);
+        let old = x.replace(5);
+        assert_eq!(x, MyOption::Some(5));
+        assert_eq!(old, MyOption::Some(2));
+
+        let mut x = MyOption::None;
+        let old = x.replace(3);
+        assert_eq!(x, MyOption::Some(3));
+        assert_eq!(old, MyOption::None);
+    }
+
+    #[test]
+    fn take_test() {
+        let mut x = MyOption::Some(2);
+        let y = x.take();
+        assert_eq!(x, MyOption::None);
+        assert_eq!(y, MyOption::Some(2));
+
+        let mut x: MyOption<u32> = MyOption::None;
+        let y = x.take();
+        assert_eq!(x, MyOption::None);
+        assert_eq!(y, MyOption::None);
+    }
+
+    #[test]
+    fn get_or_insert_with_test() {
+        let mut x = MyOption::None;
+
+        {
+            let y: &mut u32 = x.get_or_insert_with(|| 5);
+            assert_eq!(y, &5);
+
+            *y = 7;
+        }
+
+        assert_eq!(x, MyOption::Some(7));
+    }
+
+    #[test]
+    fn get_or_insert_test() {
+        let mut x = MyOption::None;
+
+        {
+            let y: &mut u32 = x.get_or_insert(5);
+            assert_eq!(y, &5);
+
+            *y = 7;
+        }
+
+        assert_eq!(x, MyOption::Some(7));
+    }
 
     #[test]
     fn xor_test() {

@@ -1,10 +1,11 @@
 mod option;
-use crate::option::MyOption;
+// use crate::option::MyOption;
 
 fn main() {
-    let x: MyOption<u32> = MyOption::Some(2);
-    assert_eq!(x.is_some(), true);
+    let x = Some(1);
+    let y = Some("hi");
+    let z = None::<u8>;
 
-    let x: MyOption<u32> = MyOption::None;
-    assert_eq!(x.is_some(), false);
+    assert_eq!(x.zip(y), Some((1, "hi")));
+    assert_eq!(x.zip(z), None);
 }
