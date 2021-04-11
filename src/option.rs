@@ -69,6 +69,17 @@ impl<T> MyOption<T> {
         }
     }
 
+    pub fn map_or_else<U, D, F>(self, default: D, f: F) -> U
+    where
+        D: FnOnce() -> U,
+        F: FnOnce(T) -> U,
+    {
+        match self {
+            MyOption::Some(val) => f(val),
+            MyOption::None => default(),
+        }
+    }
+
     pub fn unwrap(self) -> T {
         match self {
             MyOption::Some(t) => t,
@@ -94,12 +105,199 @@ impl<T> MyOption<T> {
             MyOption::None => f(),
         }
     }
+
+    pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+        match self {
+            MyOption::Some(val) => Ok(val),
+            MyOption::None => Err(err),
+        }
+    }
+
+    pub fn ok_or_else<E, F>(self, f: F) -> Result<T, E>
+    where
+        F: FnOnce() -> E,
+    {
+        match self {
+            MyOption::Some(val) => Ok(val),
+            MyOption::None => Err(f()),
+        }
+    }
+
+    pub fn and<U>(self, optb: MyOption<U>) -> MyOption<U> {
+        match self {
+            MyOption::Some(val) => optb,
+            MyOption::None => MyOption::None,
+        }
+    }
+
+    pub fn and_then<U, F>(self, f: F) -> MyOption<U>
+    where
+        F: FnOnce(T) -> MyOption<U>,
+    {
+        match self {
+            MyOption::Some(val) => f(val),
+            MyOption::None => MyOption::None,
+        }
+    }
+
+    pub fn filter<P>(self, predicate: P) -> MyOption<T>
+    where
+        P: FnOnce(&T) -> bool,
+    {
+        match self {
+            MyOption::Some(t) if predicate(&t) => MyOption::Some(t),
+            _ => MyOption::None,
+        }
+    }
+
+    pub fn or(self, optb: MyOption<T>) -> MyOption<T> {
+        match self {
+            MyOption::Some(_) => self,
+            MyOption::None => optb,
+        }
+    }
+
+    pub fn or_else<F>(self, f: F) -> MyOption<T>
+    where
+        F: FnOnce() -> MyOption<T>,
+    {
+        match self {
+            MyOption::Some(_) => self,
+            MyOption::None => f(),
+        }
+    }
+
+    pub fn xor(self, optb: MyOption<T>) -> MyOption<T> {
+        match (self, optb) {
+            (MyOption::Some(a), MyOption::None) => MyOption::Some(a),
+            (MyOption::None, MyOption::Some(b)) => MyOption::Some(b),
+            _ => MyOption::None,
+        }
+    }
 }
 
 #[cfg(test)]
 pub mod options_test {
 
     use super::MyOption;
+
+    #[test]
+    fn xor_test() {
+        let x = MyOption::Some(2);
+        let y: MyOption<u32> = MyOption::None;
+        assert_eq!(x.xor(y), MyOption::Some(2));
+
+        let x: MyOption<u32> = MyOption::None;
+        let y = MyOption::Some(2);
+        assert_eq!(x.xor(y), MyOption::Some(2));
+
+        let x = MyOption::Some(2);
+        let y = MyOption::Some(2);
+        assert_eq!(x.xor(y), MyOption::None);
+
+        let x: MyOption<u32> = MyOption::None;
+        let y: MyOption<u32> = MyOption::None;
+        assert_eq!(x.xor(y), MyOption::None);
+    }
+
+    #[test]
+    fn or_else_test() {
+        fn nobody() -> MyOption<&'static str> {
+            MyOption::None
+        }
+        fn vikings() -> MyOption<&'static str> {
+            MyOption::Some("vikings")
+        }
+
+        assert_eq!(
+            MyOption::Some("barbarians").or_else(vikings),
+            MyOption::Some("barbarians")
+        );
+        assert_eq!(MyOption::None.or_else(vikings), MyOption::Some("vikings"));
+        assert_eq!(MyOption::None.or_else(nobody), MyOption::None);
+    }
+
+    #[test]
+    fn or_test() {
+        let x = MyOption::Some(2);
+        let y = MyOption::None;
+        assert_eq!(x.or(y), MyOption::Some(2));
+
+        let x = MyOption::None;
+        let y = MyOption::Some(100);
+        assert_eq!(x.or(y), MyOption::Some(100));
+
+        let x = MyOption::Some(2);
+        let y = MyOption::Some(100);
+        assert_eq!(x.or(y), MyOption::Some(2));
+
+        let x: MyOption<i32> = MyOption::None;
+        let y = MyOption::None;
+        assert_eq!(x.or(y), MyOption::None);
+    }
+
+    #[test]
+    fn filter_test() {
+        fn is_even(n: &i32) -> bool {
+            n % 2 == 0
+        }
+
+        assert_eq!(MyOption::None.filter(is_even), MyOption::None);
+        assert_eq!(MyOption::Some(3).filter(is_even), MyOption::None);
+        assert_eq!(MyOption::Some(4).filter(is_even), MyOption::Some(4));
+    }
+
+    #[test]
+    fn and_then_test() {
+        fn sq(x: u32) -> MyOption<u32> {
+            MyOption::Some(x * x)
+        }
+        fn nope(_: u32) -> MyOption<u32> {
+            MyOption::None
+        }
+
+        assert_eq!(
+            MyOption::Some(2).and_then(sq).and_then(sq),
+            MyOption::Some(16)
+        );
+        assert_eq!(
+            MyOption::Some(2).and_then(sq).and_then(nope),
+            MyOption::None
+        );
+        assert_eq!(
+            MyOption::Some(2).and_then(nope).and_then(sq),
+            MyOption::None
+        );
+        assert_eq!(MyOption::None.and_then(sq).and_then(sq), MyOption::None);
+    }
+
+    #[test]
+    fn and_test() {
+        let x = MyOption::Some(2);
+        let y: MyOption<&str> = MyOption::None;
+        assert_eq!(x.and(y), MyOption::None);
+
+        let x: MyOption<u32> = MyOption::None;
+        let y = MyOption::Some("foo");
+        assert_eq!(x.and(y), MyOption::None);
+
+        let x = MyOption::Some(2);
+        let y = MyOption::Some("foo");
+        assert_eq!(x.and(y), MyOption::Some("foo"));
+
+        let x: MyOption<u32> = MyOption::None;
+        let y: MyOption<&str> = MyOption::None;
+        assert_eq!(x.and(y), MyOption::None);
+    }
+
+    #[test]
+    fn ok_or_else_test() {
+        let x = MyOption::Some("foo");
+        assert_eq!(x.ok_or_else(|| 0), Ok("foo"));
+
+        let x: MyOption<&str> = MyOption::None;
+        assert_eq!(x.ok_or_else(|| 0), Err(0));
+    }
 
     #[test]
     fn is_some_and_is_none() {
@@ -127,6 +325,17 @@ pub mod options_test {
 
         let x: MyOption<&str> = MyOption::None;
         assert_eq!(x.map_or(42, |v| v.len()), 42);
+    }
+
+    #[test]
+    fn map_or_else_test() {
+        let k = 21;
+
+        let x = MyOption::Some("foo");
+        assert_eq!(x.map_or_else(|| 2 * k, |v| v.len()), 3);
+
+        let x: MyOption<&str> = MyOption::None;
+        assert_eq!(x.map_or_else(|| 2 * k, |v| v.len()), 42);
     }
 
     #[test]
@@ -172,5 +381,14 @@ pub mod options_test {
         let k = 10;
         assert_eq!(MyOption::Some(4).unwrap_or_else(|| 2 * k), 4);
         assert_eq!(MyOption::None.unwrap_or_else(|| 2 * k), 20);
+    }
+
+    #[test]
+    fn ok_or_test() {
+        let x = MyOption::Some("foo");
+        assert_eq!(x.ok_or(0), Ok("foo"));
+
+        let x: MyOption<&str> = MyOption::None;
+        assert_eq!(x.ok_or(0), Err(0));
     }
 }
