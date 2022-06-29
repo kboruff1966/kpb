@@ -1,3 +1,6 @@
+// #![allow(dead_code)]
+// #![allow(unused_variables)]
+
 // replicate the std::option module
 use std::mem;
 
@@ -31,7 +34,7 @@ impl<T> Default for MyOption<T> {
 
 impl<T> MyOption<T> {
     pub const fn is_some(&self) -> bool {
-        // returns true of option is a some value
+        // returns true if option is a some value
         std::matches!(self, MyOption::Some(_))
     }
 

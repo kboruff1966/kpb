@@ -1,11 +1,14 @@
-mod option;
-// use crate::option::MyOption;
+// mod iter;
+// mod option;
+
+// use iter::MyIterator;
+// use option::MyOption;
 
 fn main() {
-    let x = Some(1);
-    let y = Some("hi");
-    let z = None::<u8>;
+    let a = [0, 1, 2];
 
-    assert_eq!(x.zip(y), Some((1, "hi")));
-    assert_eq!(x.zip(z), None);
+    let mut iter = a.iter().filter(|&&x| x > 1); // need two *s!
+
+    assert_eq!(iter.next(), Some(&2));
+    assert_eq!(iter.next(), None);
 }
